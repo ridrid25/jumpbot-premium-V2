@@ -689,7 +689,9 @@
             initCanvas();
             window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
 
+            let neuralRunning = false;
             function drawNeuralNetwork() {
+                if (!neuralRunning) return;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 const accentColor = getComputedStyle(body).getPropertyValue('--accent').trim();
                 const accentRgb = accentColor === "#FF007F" ? "255, 0, 127" : (accentColor === "#00FF66" ? "0, 255, 102" : "0, 229, 255");
@@ -728,6 +730,7 @@
                 });
                 requestAnimationFrame(drawNeuralNetwork);
             }
+            neuralRunning = true;
             drawNeuralNetwork();
 
             // --- следящий свет ---
@@ -764,7 +767,9 @@
                 }
             }
 
+            let sphereRunning = false;
             function drawSphere() {
+                if (!sphereRunning) return;
                 sCtx.clearRect(0,0, sphereCanvas.width, sphereCanvas.height);
                 sphereRotationY += 0.003;
                 sCtx.font = '14px monospace';
@@ -780,7 +785,34 @@
             }
             window.addEventListener('resize', initSphere);
             initSphere();
+            sphereRunning = true;
             drawSphere();
+
+            // --- пауза анимаций, когда не видны / вкладка свёрнута ---
+            const heroSection = document.getElementById('hero');
+            let heroVisible = true;
+            const resumeNeural = () => { if (!document.hidden && !neuralRunning) { neuralRunning = true; drawNeuralNetwork(); } };
+            const resumeSphere = () => { if (!document.hidden && heroVisible && !sphereRunning) { sphereRunning = true; drawSphere(); } };
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    neuralRunning = false;
+                    sphereRunning = false;
+                } else {
+                    resumeNeural();
+                    resumeSphere();
+                }
+            });
+            // сфера живёт только на первом экране — гасим её, когда он ушёл из вида
+            if ('IntersectionObserver' in window && heroSection) {
+                new IntersectionObserver((entries) => {
+                    heroVisible = entries[0].isIntersecting;
+                    if (heroVisible) {
+                        resumeSphere();
+                    } else {
+                        sphereRunning = false;
+                    }
+                }, { threshold: 0 }).observe(heroSection);
+            }
 
             // --- переключатель вайба ---
             const switchBtns = document.querySelectorAll('.vibe-switch-btn');
