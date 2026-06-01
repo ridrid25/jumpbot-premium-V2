@@ -289,10 +289,7 @@
 
             <div class="w-[180px] sm:w-[220px] neon-frame rounded-2xl overflow-hidden mt-6 bg-[#03050a]">
                 <div class="pointer-events-none relative w-full pt-[177.78%]">
-                    <div id="hero-video-placeholder" class="absolute inset-0 w-full h-full flex items-center justify-center bg-[#03050a]">
-                        <div class="w-8 h-8 rounded-full border-2 border-white/10 border-t-[var(--accent)] animate-spin"></div>
-                    </div>
-                    <iframe id="hero-video" data-src="https://kinescope.io/embed/ruFu7rakqqXd2ggTpXU8Rb?autoplay=1&loop=1&muted=1&playsinline=1&controls=0" class="absolute inset-0 w-full h-full" frameborder="0" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                    <iframe id="hero-video" src="https://kinescope.io/embed/ruFu7rakqqXd2ggTpXU8Rb?autoplay=1&loop=1&muted=1&playsinline=1&controls=0" class="absolute inset-0 w-full h-full" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
                 </div>
             </div>
         </div>
@@ -584,33 +581,22 @@
                 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
             const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-            // helper: выполнить колбэк, когда главный поток простаивает
-            const whenIdle = (cb) => {
-                if ('requestIdleCallback' in window) {
-                    requestIdleCallback(cb, { timeout: 1500 });
+            // helper: отложить запуск тяжёлых анимаций, чтобы они не конкурировали
+            // с загрузкой/декодированием видео в первую секунду на мобильных
+            const startWhenIdle = (cb) => {
+                const run = () => {
+                    if ('requestIdleCallback' in window) {
+                        requestIdleCallback(cb, { timeout: 1200 });
+                    } else {
+                        setTimeout(cb, 250);
+                    }
+                };
+                if (document.readyState === 'complete') {
+                    run();
                 } else {
-                    setTimeout(cb, 300);
+                    window.addEventListener('load', run, { once: true });
                 }
             };
-
-            // --- отложенная загрузка видео с первого экрана ---
-            // На мобильных одновременный старт canvas-анимаций и декодирование iframe
-            // вызывали фриз ~1с. Грузим видео только после первой отрисовки и простоя CPU.
-            const heroVideo = document.getElementById('hero-video');
-            const heroPlaceholder = document.getElementById('hero-video-placeholder');
-            function loadHeroVideo() {
-                if (!heroVideo || heroVideo.src) return;
-                heroVideo.addEventListener('load', () => {
-                    if (heroPlaceholder) heroPlaceholder.style.opacity = '0';
-                }, { once: true });
-                if (heroPlaceholder) heroPlaceholder.style.transition = 'opacity 0.4s ease';
-                heroVideo.src = heroVideo.dataset.src;
-            }
-            if (document.readyState === 'complete') {
-                whenIdle(loadHeroVideo);
-            } else {
-                window.addEventListener('load', () => whenIdle(loadHeroVideo), { once: true });
-            }
 
             // --- audio ---
             let soundEnabled = false;
@@ -781,7 +767,7 @@
                     }
                 }
             }
-            if (!reduceMotion) requestAnimationFrame(drawNeuralNetwork);
+            if (!reduceMotion) startWhenIdle(() => requestAnimationFrame(drawNeuralNetwork));
 
             // --- следящий свет ---
             const glow = document.getElementById('vibe-cursor-glow');
@@ -847,7 +833,7 @@
             if (reduceMotion) {
                 drawSphere(1e9); // одна статичная отрисовка вместо анимации
             } else {
-                requestAnimationFrame(drawSphere);
+                startWhenIdle(() => requestAnimationFrame(drawSphere));
             }
 
             // --- переключатель вайба ---
