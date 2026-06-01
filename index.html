@@ -4,15 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>JumpBot AI & Платформа Вайб-Кодинга Премиум</title>
-
-    <!-- Прогрев соединений: плеер видео и шрифты стартуют быстрее -->
-    <link rel="preconnect" href="https://kinescope.io" crossorigin>
-    <link rel="preconnect" href="https://cdn.kinescope.io" crossorigin>
-    <link rel="dns-prefetch" href="https://kinescope.io">
-    <link rel="dns-prefetch" href="https://cdn.kinescope.io">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -244,7 +235,7 @@
             min-height: 80px;
         }
 
-        /* мгновенная заглушка поверх hero-видео, пока плеер грузится */
+        /* мгновенная заглушка поверх hero-видео, пока оно грузится */
         .video-skeleton {
             position: absolute;
             inset: 0;
@@ -256,7 +247,7 @@
             align-items: center;
             justify-content: center;
             opacity: 1;
-            transition: opacity 0.6s ease;
+            transition: opacity 0.5s ease;
             overflow: hidden;
         }
         .video-skeleton::after {
@@ -342,7 +333,7 @@
 
             <div class="w-[180px] sm:w-[220px] neon-frame rounded-2xl overflow-hidden mt-6 bg-[#03050a]">
                 <div class="pointer-events-none relative w-full pt-[177.78%]">
-                    <video id="hero-video" class="absolute inset-0 w-full h-full object-cover" src="assets/hero.mp4" autoplay muted loop playsinline preload="auto" disablepictureinpicture x5-playsinline webkit-playsinline></video>
+                    <video id="hero-video" class="absolute inset-0 w-full h-full object-cover" src="assets/hero.mp4" autoplay muted loop playsinline preload="auto" fetchpriority="high" disablepictureinpicture x5-playsinline webkit-playsinline></video>
                     <div id="hero-video-skeleton" class="video-skeleton">
                         <div class="skeleton-spinner"></div>
                     </div>
@@ -632,13 +623,8 @@
         document.addEventListener("DOMContentLoaded", function() {
             const body = document.body;
 
-            // --- определение мобильных устройств для облегчения анимаций ---
-            const isMobile = window.matchMedia('(max-width: 768px)').matches
-                || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-            // --- hero-видео (нативный <video>, локальный файл) ---
-            // Заглушка скрывается, как только готов первый кадр видео. Для
-            // мобильных принудительно запускаем воспроизведение (muted+playsinline).
+            // --- hero-видео первого экрана (локальный MP4) ---
+            // Заглушка скрывается, как только готов первый кадр видео.
             const heroVideo = document.getElementById('hero-video');
             const heroSkeleton = document.getElementById('hero-video-skeleton');
             if (heroVideo && heroSkeleton) {
@@ -647,18 +633,16 @@
                     if (skeletonHidden) return;
                     skeletonHidden = true;
                     heroSkeleton.classList.add('is-loaded');
-                    setTimeout(() => heroSkeleton.remove(), 700);
+                    setTimeout(() => heroSkeleton.remove(), 600);
                 };
-                // первый кадр готов / пошло воспроизведение — убираем заглушку
                 heroVideo.addEventListener('loadeddata', hideSkeleton, { once: true });
                 heroVideo.addEventListener('playing', hideSkeleton, { once: true });
-                if (heroVideo.readyState >= 2) hideSkeleton(); // кадр уже доступен
-                // некоторые мобильные браузеры требуют явного запуска
+                if (heroVideo.readyState >= 2) hideSkeleton();
+                // явный запуск воспроизведения для мобильных браузеров
                 const tryPlay = () => { const p = heroVideo.play(); if (p) p.catch(() => {}); };
                 tryPlay();
                 document.addEventListener('touchstart', tryPlay, { once: true, passive: true });
-                // страховка: не держим заглушку бесконечно
-                setTimeout(hideSkeleton, 3000);
+                setTimeout(hideSkeleton, 3000); // страховка
             }
 
             // --- audio ---
@@ -756,12 +740,11 @@
             let points = [];
             let mouseX = 0; let mouseY = 0;
 
-            const neuralPointCount = isMobile ? 20 : 40;
             function initCanvas() {
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
                 points = [];
-                for (let i = 0; i < neuralPointCount; i++) {
+                for (let i = 0; i < 40; i++) {
                     points.push({
                         x: Math.random() * canvas.width,
                         y: Math.random() * canvas.height,
@@ -775,14 +758,7 @@
             initCanvas();
             window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
 
-            const neuralFrameInterval = isMobile ? 1000 / 30 : 0; // FPS-лимит на мобильных
-            let lastNeuralFrame = 0;
-            function drawNeuralNetwork(now) {
-                requestAnimationFrame(drawNeuralNetwork);
-                if (document.hidden) return;
-                if (neuralFrameInterval && (now - lastNeuralFrame) < neuralFrameInterval) return;
-                lastNeuralFrame = now || 0;
-
+            function drawNeuralNetwork() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 const accentColor = getComputedStyle(body).getPropertyValue('--accent').trim();
                 const accentRgb = accentColor === "#FF007F" ? "255, 0, 127" : (accentColor === "#00FF66" ? "0, 255, 102" : "0, 229, 255");
@@ -819,8 +795,9 @@
                         ctx.stroke();
                     }
                 });
+                requestAnimationFrame(drawNeuralNetwork);
             }
-            requestAnimationFrame(drawNeuralNetwork);
+            drawNeuralNetwork();
 
             // --- следящий свет ---
             const glow = document.getElementById('vibe-cursor-glow');
@@ -833,7 +810,7 @@
             const sphereCanvas = document.getElementById('sphere-canvas');
             const sCtx = sphereCanvas.getContext('2d');
             let sphereParticles = [];
-            const numParticles = isMobile ? 140 : 300;
+            const numParticles = 300;
             const chars = ['0', '1'];
             let sphereRotationY = 0;
             let currentAccentColor = '#00E5FF';
@@ -856,34 +833,23 @@
                 }
             }
 
-            const sphereFrameInterval = isMobile ? 1000 / 30 : 0; // FPS-лимит на мобильных
-            let lastSphereFrame = 0;
-            function drawSphere(now) {
-                requestAnimationFrame(drawSphere);
-                if (document.hidden) return;
-                if (sphereFrameInterval && (now - lastSphereFrame) < sphereFrameInterval) return;
-                lastSphereFrame = now || 0;
-
+            function drawSphere() {
                 sCtx.clearRect(0,0, sphereCanvas.width, sphereCanvas.height);
                 sphereRotationY += 0.003;
                 sCtx.font = '14px monospace';
                 sCtx.fillStyle = currentAccentColor;
                 sCtx.textAlign = 'center';
-                const cosR = Math.cos(sphereRotationY);
-                const sinR = Math.sin(sphereRotationY);
-                const cx = sphereCanvas.width / 2;
-                const cy = sphereCanvas.height / 2;
                 sphereParticles.forEach(p => {
-                    const x1 = p.x*cosR - p.z*sinR;
-                    const z1 = p.z*cosR + p.x*sinR;
-                    const scale = 1000/(1000+z1);
+                    const x1 = p.x*Math.cos(sphereRotationY) - p.z*Math.sin(sphereRotationY);
+                    const z1 = p.z*Math.cos(sphereRotationY) + p.x*Math.sin(sphereRotationY);
                     sCtx.globalAlpha = Math.max(0.4, (z1+400)/800);
-                    sCtx.fillText(p.char, x1*scale + cx, p.y*scale + cy);
+                    sCtx.fillText(p.char, x1*(1000/(1000+z1)) + sphereCanvas.width/2, p.y*(1000/(1000+z1)) + sphereCanvas.height/2);
                 });
+                requestAnimationFrame(drawSphere);
             }
             window.addEventListener('resize', initSphere);
             initSphere();
-            requestAnimationFrame(drawSphere);
+            drawSphere();
 
             // --- переключатель вайба ---
             const switchBtns = document.querySelectorAll('.vibe-switch-btn');
