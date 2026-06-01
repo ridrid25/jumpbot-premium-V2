@@ -289,10 +289,7 @@
 
             <div class="w-[180px] sm:w-[220px] neon-frame rounded-2xl overflow-hidden mt-6 bg-[#03050a]">
                 <div class="pointer-events-none relative w-full pt-[177.78%]">
-                    <div id="hero-video-placeholder" class="absolute inset-0 w-full h-full flex items-center justify-center bg-[#03050a]">
-                        <div class="w-8 h-8 rounded-full border-2 border-white/10 border-t-[var(--accent)] animate-spin"></div>
-                    </div>
-                    <iframe id="hero-video" data-src="https://kinescope.io/embed/ruFu7rakqqXd2ggTpXU8Rb?autoplay=1&loop=1&muted=1&playsinline=1&controls=0" class="absolute inset-0 w-full h-full" frameborder="0" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                    <iframe src="https://kinescope.io/embed/ruFu7rakqqXd2ggTpXU8Rb?autoplay=1&loop=1&muted=1&playsinline=1&controls=0" class="absolute inset-0 w-full h-full" frameborder="0" allowfullscreen></iframe>
                 </div>
             </div>
         </div>
@@ -579,39 +576,6 @@
         document.addEventListener("DOMContentLoaded", function() {
             const body = document.body;
 
-            // --- определение слабых/мобильных устройств для облегчения анимаций ---
-            const isMobile = window.matchMedia('(max-width: 768px)').matches
-                || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-            // helper: выполнить колбэк, когда главный поток простаивает
-            const whenIdle = (cb) => {
-                if ('requestIdleCallback' in window) {
-                    requestIdleCallback(cb, { timeout: 1500 });
-                } else {
-                    setTimeout(cb, 300);
-                }
-            };
-
-            // --- отложенная загрузка видео с первого экрана ---
-            // На мобильных одновременный старт canvas-анимаций и декодирование iframe
-            // вызывали фриз ~1с. Грузим видео только после первой отрисовки и простоя CPU.
-            const heroVideo = document.getElementById('hero-video');
-            const heroPlaceholder = document.getElementById('hero-video-placeholder');
-            function loadHeroVideo() {
-                if (!heroVideo || heroVideo.src) return;
-                heroVideo.addEventListener('load', () => {
-                    if (heroPlaceholder) heroPlaceholder.style.opacity = '0';
-                }, { once: true });
-                if (heroPlaceholder) heroPlaceholder.style.transition = 'opacity 0.4s ease';
-                heroVideo.src = heroVideo.dataset.src;
-            }
-            if (document.readyState === 'complete') {
-                whenIdle(loadHeroVideo);
-            } else {
-                window.addEventListener('load', () => whenIdle(loadHeroVideo), { once: true });
-            }
-
             // --- audio ---
             let soundEnabled = false;
             let audioCtx = null;
@@ -707,12 +671,11 @@
             let points = [];
             let mouseX = 0; let mouseY = 0;
 
-            const neuralPointCount = isMobile ? 18 : 40;
             function initCanvas() {
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
                 points = [];
-                for (let i = 0; i < neuralPointCount; i++) {
+                for (let i = 0; i < 40; i++) {
                     points.push({
                         x: Math.random() * canvas.width,
                         y: Math.random() * canvas.height,
@@ -724,23 +687,13 @@
             }
             window.addEventListener('resize', initCanvas);
             initCanvas();
-            if (!isMobile) {
-                window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
-            }
+            window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
 
-            const neuralFrameInterval = isMobile ? 1000 / 30 : 0; // ограничение FPS на мобильных
-            let lastNeuralFrame = 0;
-            function drawNeuralNetwork(now) {
-                requestAnimationFrame(drawNeuralNetwork);
-                if (document.hidden) return;
-                if (neuralFrameInterval && now - lastNeuralFrame < neuralFrameInterval) return;
-                lastNeuralFrame = now || 0;
-
+            function drawNeuralNetwork() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 const accentColor = getComputedStyle(body).getPropertyValue('--accent').trim();
                 const accentRgb = accentColor === "#FF007F" ? "255, 0, 127" : (accentColor === "#00FF66" ? "0, 255, 102" : "0, 229, 255");
 
-                // обновление позиций + узлы
                 points.forEach(p => {
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
@@ -750,13 +703,8 @@
                     p.x += p.vx; p.y += p.vy;
                     if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
                     if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-                });
 
-                // связи: каждая пара рассматривается один раз (j > i)
-                for (let i = 0; i < points.length; i++) {
-                    const p = points[i];
-                    for (let j = i + 1; j < points.length; j++) {
-                        const other = points[j];
+                    points.forEach(other => {
                         const dist = Math.hypot(p.x - other.x, p.y - other.y);
                         if (dist < 140) {
                             ctx.beginPath();
@@ -766,22 +714,21 @@
                             ctx.lineWidth = 0.7;
                             ctx.stroke();
                         }
-                    }
+                    });
 
-                    if (!isMobile) {
-                        const mouseDist = Math.hypot(p.x - mouseX, p.y - mouseY);
-                        if (mouseDist < 180) {
-                            ctx.beginPath();
-                            ctx.moveTo(p.x, p.y);
-                            ctx.lineTo(mouseX, mouseY);
-                            ctx.strokeStyle = `rgba(${accentRgb}, ${0.15 * (1 - mouseDist / 180)})`;
-                            ctx.lineWidth = 0.8;
-                            ctx.stroke();
-                        }
+                    const mouseDist = Math.hypot(p.x - mouseX, p.y - mouseY);
+                    if (mouseDist < 180) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(mouseX, mouseY);
+                        ctx.strokeStyle = `rgba(${accentRgb}, ${0.15 * (1 - mouseDist / 180)})`;
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
                     }
-                }
+                });
+                requestAnimationFrame(drawNeuralNetwork);
             }
-            if (!reduceMotion) requestAnimationFrame(drawNeuralNetwork);
+            drawNeuralNetwork();
 
             // --- следящий свет ---
             const glow = document.getElementById('vibe-cursor-glow');
@@ -794,7 +741,7 @@
             const sphereCanvas = document.getElementById('sphere-canvas');
             const sCtx = sphereCanvas.getContext('2d');
             let sphereParticles = [];
-            const numParticles = isMobile ? 130 : 300;
+            const numParticles = 300;
             const chars = ['0', '1'];
             let sphereRotationY = 0;
             let currentAccentColor = '#00E5FF';
@@ -817,38 +764,23 @@
                 }
             }
 
-            const sphereFrameInterval = isMobile ? 1000 / 30 : 0; // ограничение FPS на мобильных
-            let lastSphereFrame = 0;
-            function drawSphere(now) {
-                if (!reduceMotion) requestAnimationFrame(drawSphere);
-                if (document.hidden) return;
-                if (sphereFrameInterval && now - lastSphereFrame < sphereFrameInterval) return;
-                lastSphereFrame = now || 0;
-
+            function drawSphere() {
                 sCtx.clearRect(0,0, sphereCanvas.width, sphereCanvas.height);
                 sphereRotationY += 0.003;
                 sCtx.font = '14px monospace';
                 sCtx.fillStyle = currentAccentColor;
                 sCtx.textAlign = 'center';
-                const cosR = Math.cos(sphereRotationY);
-                const sinR = Math.sin(sphereRotationY);
-                const cx = sphereCanvas.width / 2;
-                const cy = sphereCanvas.height / 2;
                 sphereParticles.forEach(p => {
-                    const x1 = p.x*cosR - p.z*sinR;
-                    const z1 = p.z*cosR + p.x*sinR;
-                    const scale = 1000/(1000+z1);
+                    const x1 = p.x*Math.cos(sphereRotationY) - p.z*Math.sin(sphereRotationY);
+                    const z1 = p.z*Math.cos(sphereRotationY) + p.x*Math.sin(sphereRotationY);
                     sCtx.globalAlpha = Math.max(0.4, (z1+400)/800);
-                    sCtx.fillText(p.char, x1*scale + cx, p.y*scale + cy);
+                    sCtx.fillText(p.char, x1*(1000/(1000+z1)) + sphereCanvas.width/2, p.y*(1000/(1000+z1)) + sphereCanvas.height/2);
                 });
+                requestAnimationFrame(drawSphere);
             }
             window.addEventListener('resize', initSphere);
             initSphere();
-            if (reduceMotion) {
-                drawSphere(1e9); // одна статичная отрисовка вместо анимации
-            } else {
-                requestAnimationFrame(drawSphere);
-            }
+            drawSphere();
 
             // --- переключатель вайба ---
             const switchBtns = document.querySelectorAll('.vibe-switch-btn');
